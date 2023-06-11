@@ -33,7 +33,7 @@ public class WebServiceConfig extends WsConfigurerAdapter {
 		return new ServletRegistrationBean<>(servlet, "/services/*");
 	}
 
-	@Bean(name = "ProvideAndRegisterDocument")
+	@Bean(name = "description")
 	public DefaultWsdl11Definition defaultWsdl11Definition(XsdSchema documentRepositorySchema) {
 		DefaultWsdl11Definition wsdl11Definition = new DefaultWsdl11Definition();
 		wsdl11Definition.setPortTypeName("port");
