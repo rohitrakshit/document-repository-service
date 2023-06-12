@@ -304,6 +304,14 @@ public class DocumentRepositoryEndpoint {
 		System.out.println("Successfully uploaded RetrieveDocumentSetRequest response xml file " + responseBlobFilename
 				+ " to Azure blob");
 		System.out.println("RetrieveDocumentSetRequest Completed. RequestID=" + requestId);
+		
+		Map<String, List<String>> fileArchiveApiPayload = new HashMap<String, List<String>>();
+		List<String> fileList = new ArrayList<String>();
+		fileList.add(requestBlobFilename);
+		fileList.add(responseBlobFilename);
+		fileArchiveApiPayload.put(blobFilename+".zip", fileList);
+		
+		httpRequestHelper.postRequest(fileArchiveApiUrl, fileArchiveApiPayload);
 
 		return jaxbEl;
 	}
