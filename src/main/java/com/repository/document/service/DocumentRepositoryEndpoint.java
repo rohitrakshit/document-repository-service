@@ -41,6 +41,7 @@ import ihe.iti.xds_b._2007.ProvideAndRegisterDocumentSetRequestType.Document;
 import ihe.iti.xds_b._2007.RetrieveDocumentSetRequestType;
 import ihe.iti.xds_b._2007.RetrieveDocumentSetResponseType;
 import ihe.iti.xds_b._2007.RetrieveDocumentSetResponseType.DocumentResponse;
+import io.netty.util.internal.StringUtil;
 import jakarta.activation.DataHandler;
 import jakarta.annotation.PostConstruct;
 import jakarta.xml.bind.JAXBContext;
@@ -59,6 +60,8 @@ public class DocumentRepositoryEndpoint {
 			.ofPattern("dd-MMM-yyyy_HH-mm-ss").withZone(ZoneId.of("UTC"));
 	private static final DateTimeFormatter REQUEST_ID_FORMAT = DateTimeFormatter.ofPattern("ddMMyyyyHHmmss")
 			.withZone(ZoneId.of("UTC"));
+	private static final String PROVIDE_AND_REGISTER_FILENAME_PREFIX = "ProvideAndRegisterDocument_";
+	private static final String RETRIEVE_DOCUMENT_FILENAME_PREFIX = "RetrieveDocument_";
 
 	@Value("${blob.conn.string}")
 	private String blobConnString;
@@ -114,7 +117,8 @@ public class DocumentRepositoryEndpoint {
 		// String dateTime = FILENAME_DATETIME_FORMAT.format(temporal);
 		String reqId = REQUEST_ID_FORMAT.format(temporal);
 		String requestId = reqId + getAlphaNumericString(8);
-		String documentUniqueId = null;
+		String documentUniqueId = StringUtil.EMPTY_STRING;
+		List<String> fileList = new ArrayList<String>();
 		System.out.println("ProvideAndRegisterDocumentSetRequest received. RequestID=" + requestId);
 
 		SlotListType slotListType = new SlotListType();
@@ -129,13 +133,14 @@ public class DocumentRepositoryEndpoint {
 					Document document = documentList.get(i);
 					String documentId = document.getId();
 					// Use only the first documentId for the azure blob file name
-					if (documentUniqueId == null) {
+					if (!StringUtils.hasText(documentUniqueId)) {
 						documentUniqueId = documentId;
 					}
 					if (!StringUtils.hasText(documentId)) {
 						throw new RuntimeException(DocumentRepositoryMessages.DOCUMENT_UNIQUE_ID_NOT_PROVIDED);
 					}
 				}
+				
 				documentList.stream().forEach(document -> {
 					String documentId = document.getId();
 					DataHandler dataHandler = document.getValue();
@@ -148,7 +153,13 @@ public class DocumentRepositoryEndpoint {
 
 					String documentData = new String(Base64.getEncoder().encode(output.toByteArray()));
 					documentRepository.storeDocument(documentId, documentData);
-
+					
+					String dataDocumentFileName = new StringBuilder(PROVIDE_AND_REGISTER_FILENAME_PREFIX).append(documentId.replace(":", "_")).append("_").append(requestId).toString() + "_req_document.xml";
+					BlobClient blob = storeContainerClient.getBlobClient(dataDocumentFileName);
+					blob.upload(new ByteArrayInputStream(decodeBase64StringToByteArray(documentData)), true);
+					System.out.println("Successfully uploaded data document file " + dataDocumentFileName + " to Azure blob");
+					fileList.add(dataDocumentFileName);
+					
 					SlotType1 slotType1 = new SlotType1();
 					slotType1.setName(documentId);
 					slotType1.setSlotType("SUCCESS");
@@ -180,9 +191,8 @@ public class DocumentRepositoryEndpoint {
 
 		JAXBElement<RegistryResponseType> jaxbEl = new JAXBElement<RegistryResponseType>(qname,
 				RegistryResponseType.class, response);
-
-		String blobFilename = new StringBuilder("ProvideAndRegisterDocument").append("_")
-				.append(documentUniqueId.replace(":", "_")).append("_").append(requestId).toString();
+		
+		String blobFilename = new StringBuilder(PROVIDE_AND_REGISTER_FILENAME_PREFIX).append(documentUniqueId.replace(":", "_")).append("_").append(requestId).toString();
 
 		String requestBlobFilename = blobFilename + "_request.xml";
 		BlobClient blob = storeContainerClient.getBlobClient(requestBlobFilename);
@@ -219,9 +229,10 @@ public class DocumentRepositoryEndpoint {
 //		}
 		
 		Map<String, List<String>> fileArchiveApiPayload = new HashMap<String, List<String>>();
-		List<String> fileList = new ArrayList<String>();
+		
 		fileList.add(requestBlobFilename);
 		fileList.add(responseBlobFilename);
+		
 		fileArchiveApiPayload.put(blobFilename+".zip", fileList);
 		
 		httpRequestHelper.postRequest(fileArchiveApiUrl, fileArchiveApiPayload);
@@ -247,7 +258,8 @@ public class DocumentRepositoryEndpoint {
 		// String dateTime = FILENAME_DATETIME_FORMAT.format(temporal);
 		String reqId = REQUEST_ID_FORMAT.format(temporal);
 		String requestId = reqId + getAlphaNumericString(8);
-		String documentUniqueId = "";
+		String documentUniqueId = StringUtil.EMPTY_STRING;
+		List<String> fileList = new ArrayList<String>();
 		System.out.println("RetrieveDocumentSetRequest received. RequestID=" + requestId);
 
 		Set<String> documentIds = new HashSet<String>();
@@ -277,6 +289,14 @@ public class DocumentRepositoryEndpoint {
 			String documentString = documentRepository.findDocument(null, null, documentId);
 			if (StringUtils.hasText(documentString)) {
 				response.getDocumentResponse().add(addToDocumentSetArray(documentId, documentString));
+				
+				String dataDocumentFileName = new StringBuilder(RETRIEVE_DOCUMENT_FILENAME_PREFIX)
+						.append(documentId.replace(":", "_")).append("_").append(requestId).toString()+"_res_document.xml";
+				BlobClient blob = storeContainerClient.getBlobClient(dataDocumentFileName);
+				blob.upload(new ByteArrayInputStream(decodeBase64StringToByteArray(documentString)), true);
+				System.out.println("Successfully uploaded response data document file " + dataDocumentFileName + " to Azure blob");
+				fileList.add(dataDocumentFileName);
+				
 			} else {
 				throw new RuntimeException(DocumentRepositoryMessages.DOCUMENT_NOT_FOUND + documentId);
 			}
@@ -288,8 +308,8 @@ public class DocumentRepositoryEndpoint {
 		response.setRegistryResponse(registryResponse);
 		JAXBElement<RetrieveDocumentSetResponseType> jaxbEl = new JAXBElement<RetrieveDocumentSetResponseType>(qname,
 				RetrieveDocumentSetResponseType.class, response);
-
-		String blobFilename = new StringBuilder("RetrieveDocument").append("_")
+		
+		String blobFilename = new StringBuilder(RETRIEVE_DOCUMENT_FILENAME_PREFIX)
 				.append(documentUniqueId.replace(":", "_")).append("_").append(requestId).toString();
 
 		String requestBlobFilename = blobFilename + "_request.xml";
@@ -306,7 +326,6 @@ public class DocumentRepositoryEndpoint {
 		System.out.println("RetrieveDocumentSetRequest Completed. RequestID=" + requestId);
 		
 		Map<String, List<String>> fileArchiveApiPayload = new HashMap<String, List<String>>();
-		List<String> fileList = new ArrayList<String>();
 		fileList.add(requestBlobFilename);
 		fileList.add(responseBlobFilename);
 		fileArchiveApiPayload.put(blobFilename+".zip", fileList);
