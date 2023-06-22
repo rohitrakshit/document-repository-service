@@ -157,7 +157,7 @@ public class DocumentRepositoryEndpoint {
 					String dataDocumentFileName = new StringBuilder(PROVIDE_AND_REGISTER_FILENAME_PREFIX).append(documentId.replace(":", "_")).append("_").append(requestId).toString() + "_req_document.xml";
 					BlobClient blob = storeContainerClient.getBlobClient(dataDocumentFileName);
 					blob.upload(new ByteArrayInputStream(decodeBase64StringToByteArray(documentData)), true);
-					System.out.println("Successfully uploaded data document file " + dataDocumentFileName + " to Azure blob");
+					System.out.println("Successfully uploaded request data document file " + dataDocumentFileName + " to Azure blob");
 					fileList.add(dataDocumentFileName);
 					
 					SlotType1 slotType1 = new SlotType1();

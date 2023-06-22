@@ -38,5 +38,12 @@ public class DocumentRepository {
 	public Set<String> getDocumentNameList(){
 		return DocumentRepository.documentStore.keySet();
 	}
+	
+	public void deleteItem(String name){
+		DocumentRepository.documentStore.remove(name);
+	}
 
+	public void deleteAll(){
+		DocumentRepository.documentStore.clear();
+	}
 }
