@@ -3,6 +3,8 @@ package com.repository.document.controller;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,11 +20,14 @@ import com.repository.document.service.DocumentRepository;
 @RequestMapping("/api")
 public class AppController {
 	
+	private static final Logger logger = LoggerFactory.getLogger(AppController.class);
+	
 	@Autowired
 	private DocumentRepository documentRepository;
 	
 	@DeleteMapping("/clean/all")
 	public ResponseEntity<Map<String, String>> cleanUpAll(){
+		logger.info("Clean all document request received");
 		this.documentRepository.deleteAll();
 		Map<String, String> response = new HashMap<String,String>();
 		response.put("message", "Successfully cleaned up the in-memory data store");

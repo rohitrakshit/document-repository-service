@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -13,10 +14,24 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.util.Assert;
 
 @Component
 public class DocumentRepositoryUtil {
+	
+	private static final Logger logger = LoggerFactory.getLogger(DocumentRepositoryUtil.class);
+	
+	/**
+	 * @param base64EncStr
+	 * @return
+	 */
+	public static byte[] decodeBase64StringToByteArray(String base64EncStr) {
+		Assert.notNull(base64EncStr, "String value must not be null");
+		return Base64.getDecoder().decode(base64EncStr);
+	}
 
 	public byte[] zipFiles(Map<String, Map<String, byte[]>> zipFiles) {
 		byte[] responseBytes = null;
@@ -28,8 +43,8 @@ public class DocumentRepositoryUtil {
 				for (Entry<String, byte[]> fileEntry : fileContents.entrySet()) {
 
 					ByteArrayInputStream bais = new ByteArrayInputStream(fileEntry.getValue());
-					System.out.println(
-							"fileName " + fileEntry.getKey() + " testString.getBytes() " + fileEntry.getValue());
+					logger.debug(
+							"fileName " + fileEntry.getKey() + " fileEntry.getValue() " + fileEntry.getValue());
 
 					ZipEntry zipEntry = new ZipEntry(fileEntry.getKey());
 					zipOut.putNextEntry(zipEntry);
@@ -54,7 +69,7 @@ public class DocumentRepositoryUtil {
 				responseBytes = zipBytes;
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error("IOException while creating .zip file", e);
 		}
 		return responseBytes;
 	}

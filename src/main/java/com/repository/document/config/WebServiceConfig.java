@@ -8,6 +8,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.oxm.jaxb.Jaxb2Marshaller;
 import org.springframework.ws.config.annotation.EnableWs;
 import org.springframework.ws.config.annotation.WsConfigurerAdapter;
@@ -46,6 +48,11 @@ public class WebServiceConfig extends WsConfigurerAdapter {
 	@Bean
 	public XsdSchema documentRepositorySchema() {
 		return new SimpleXsdSchema(new ClassPathResource("static/services/XDS.b_DocumentRepositoryMTOM.xsd"));
+	}
+	
+	@Bean
+	public TaskExecutor taskExecutor() {
+	    return new SimpleAsyncTaskExecutor(); 
 	}
 	
 	/**

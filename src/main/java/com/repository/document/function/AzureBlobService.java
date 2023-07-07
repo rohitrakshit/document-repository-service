@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.Message;
@@ -26,6 +28,8 @@ import jakarta.annotation.PostConstruct;
 
 @Component
 public class AzureBlobService {
+	
+	private static final Logger logger = LoggerFactory.getLogger(AzureBlobService.class);
 
 	@Autowired
 	private DocumentRepositoryUtil documentRepositoryUtil;
@@ -75,7 +79,7 @@ public class AzureBlobService {
 			}
 
 		} catch (Exception e) {
-			e.printStackTrace();
+			logger.error("Exception while file download zipping and uploading the file", e);
 			response = "Failed to archive files. "+ e.getMessage();
 		}
 		return response;
@@ -92,7 +96,7 @@ public class AzureBlobService {
 		BlobClient blob = blobContainerClient.getBlobClient(fileName);
 
 		String content = blob.downloadContent().toString();
-		System.out.printf("Blob contents: %s%n", content);
+		logger.debug("Blob contents: %s%n", content);
 
 //	    
 //		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -117,5 +121,18 @@ public class AzureBlobService {
 		blob.delete();
 		return true;
 	}
+	
+    /**
+     * Check blob exists or not
+     * 
+     * @param    containerName    Target container
+     * @param    fileName        Blob name
+     * @return    true/false        flag
+     */
+    public boolean blobExists(BlobContainerClient blobContainerClient, String fileName) {
+        BlobClient blob= blobContainerClient.getBlobClient(fileName);
+        return blob.exists();
+    }
+
 
 }

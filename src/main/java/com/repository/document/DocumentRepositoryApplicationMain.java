@@ -10,6 +10,8 @@ import com.repository.document.function.AzureBlobService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -24,6 +26,8 @@ import org.springframework.messaging.Message;
  */
 @SpringBootApplication
 public class DocumentRepositoryApplicationMain extends SpringBootServletInitializer {
+	
+	private static final Logger logger = LoggerFactory.getLogger(DocumentRepositoryApplicationMain.class);
 
 	@Override
 	protected SpringApplicationBuilder configure(SpringApplicationBuilder application) {
@@ -42,7 +46,7 @@ public class DocumentRepositoryApplicationMain extends SpringBootServletInitiali
 		return message -> {
 			Map<String, List<String>> fileArchivePayload = message.getPayload();
 			String response = azureBlobService.downloadFilesAndZipUpload(fileArchivePayload);
-			System.out.println("Azure blob file zip operation successful");
+			logger.info("Azure blob file zip operation successful");
 			return response;
 		};
 	}

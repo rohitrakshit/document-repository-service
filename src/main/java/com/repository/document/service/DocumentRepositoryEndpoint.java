@@ -3,7 +3,6 @@ package com.repository.document.service;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -19,8 +18,11 @@ import java.util.Set;
 
 import javax.xml.namespace.QName;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.ws.server.endpoint.annotation.Endpoint;
@@ -32,6 +34,9 @@ import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobContainerClientBuilder;
 import com.repository.document.constants.DocumentRepositoryMessages;
+import com.repository.document.executor.AzureBlobArchiveExecutor;
+import com.repository.document.executor.AzureBlobFileUploadExecutor;
+import com.repository.document.executor.ExecutorStarter;
 import com.repository.document.function.AzureBlobService;
 import com.repository.document.helper.HttpRequestHelper;
 import com.repository.document.util.DocumentRepositoryUtil;
@@ -55,6 +60,8 @@ import oasis.names.tc.ebxml_regrep.xsd.rs._3.RegistryResponseType;
 @Endpoint
 public class DocumentRepositoryEndpoint {
 
+	private static final Logger logger = LoggerFactory.getLogger(DocumentRepositoryEndpoint.class);
+
 	private static final String NAMESPACE_URI = "urn:ihe:iti:xds-b:2007";
 	private static final DateTimeFormatter FILENAME_DATETIME_FORMAT = DateTimeFormatter
 			.ofPattern("dd-MMM-yyyy_HH-mm-ss").withZone(ZoneId.of("UTC"));
@@ -71,9 +78,18 @@ public class DocumentRepositoryEndpoint {
 
 	@Value("${blob.archive-container-name}")
 	private String archiveContainerName;
-	
+
 	@Value("${file-archive.api.url}")
 	private String fileArchiveApiUrl;
+	
+	@Value("${enable.blob.store.register.document}")
+	private boolean enableBlobStoreRegisterDocument;
+	
+	@Value("${enable.blob.store.retrieve.document}")
+	private boolean enableBlobStoreRetrieveDocument;
+	
+	@Value("${enable.blob.store.file.archive}")
+	private boolean enableBlobStoreFileArchive;
 
 	private BlobContainerClient storeContainerClient;
 	private BlobContainerClient archiveContainerClient;
@@ -95,9 +111,12 @@ public class DocumentRepositoryEndpoint {
 
 	@Autowired
 	private DocumentRepositoryUtil documentRepositoryUtil;
-	
+
 	@Autowired
 	private HttpRequestHelper httpRequestHelper;
+
+	@Autowired
+	public TaskExecutor taskExecutor;
 
 	/**
 	 * @param request
@@ -105,11 +124,17 @@ public class DocumentRepositoryEndpoint {
 	 */
 	@PayloadRoot(namespace = NAMESPACE_URI, localPart = "ProvideAndRegisterDocumentSetRequest")
 	@ResponsePayload
-	public JAXBElement<RegistryResponseType> provideAndRegisterDocumentSetRequestRequest(
+	public JAXBElement<RegistryResponseType> provideAndRegisterDocumentSetRequest(
 			@RequestPayload JAXBElement<ProvideAndRegisterDocumentSetRequestType> request) {
-
+		return provideAndRegisterDocumentSet_bRequest(request);
+	}
+	@PayloadRoot(namespace = NAMESPACE_URI, localPart = "ProvideAndRegisterDocumentSet_bRequest")
+	@ResponsePayload
+	public JAXBElement<RegistryResponseType> provideAndRegisterDocumentSet_bRequest(
+			@RequestPayload JAXBElement<ProvideAndRegisterDocumentSetRequestType> request) {
+	
 		String fullReqStr = toXml(request);
-		// System.out.println("Full Request String= " + fullReqStr);
+		// logger.info("Full Request String= " + fullReqStr);
 		RegistryResponseType response = new RegistryResponseType();
 		QName qname = new QName(NAMESPACE_URI, "Success", "env");
 
@@ -119,7 +144,8 @@ public class DocumentRepositoryEndpoint {
 		String requestId = reqId + getAlphaNumericString(8);
 		String documentUniqueId = StringUtil.EMPTY_STRING;
 		List<String> fileList = new ArrayList<String>();
-		System.out.println("ProvideAndRegisterDocumentSetRequest received. RequestID=" + requestId);
+		List<Runnable> executions = new ArrayList<Runnable>();
+		logger.info("ProvideAndRegisterDocumentSetRequest received. RequestID=" + requestId);
 
 		SlotListType slotListType = new SlotListType();
 		RegistryErrorList registryErrorList = new RegistryErrorList();
@@ -140,7 +166,7 @@ public class DocumentRepositoryEndpoint {
 						throw new RuntimeException(DocumentRepositoryMessages.DOCUMENT_UNIQUE_ID_NOT_PROVIDED);
 					}
 				}
-				
+
 				documentList.stream().forEach(document -> {
 					String documentId = document.getId();
 					DataHandler dataHandler = document.getValue();
@@ -148,18 +174,20 @@ public class DocumentRepositoryEndpoint {
 					try {
 						dataHandler.writeTo(output);
 					} catch (IOException e) {
-						e.printStackTrace();
+						logger.error("IOException while dataHandler.writeTo(output)", e);
 					}
 
 					String documentData = new String(Base64.getEncoder().encode(output.toByteArray()));
 					documentRepository.storeDocument(documentId, documentData);
-					
-					String dataDocumentFileName = new StringBuilder(PROVIDE_AND_REGISTER_FILENAME_PREFIX).append(documentId.replace(":", "_")).append("_").append(requestId).toString() + "_req_document.xml";
-					BlobClient blob = storeContainerClient.getBlobClient(dataDocumentFileName);
-					blob.upload(new ByteArrayInputStream(decodeBase64StringToByteArray(documentData)), true);
-					System.out.println("Successfully uploaded request data document file " + dataDocumentFileName + " to Azure blob");
+
+					String dataDocumentFileName = new StringBuilder(PROVIDE_AND_REGISTER_FILENAME_PREFIX)
+							.append(documentId.replace(":", "_")).append("_").append(requestId).toString()
+							+ "_req_document.xml";
+					if(enableBlobStoreRegisterDocument) {
+						executions.add(new AzureBlobFileUploadExecutor(storeContainerClient, dataDocumentFileName, DocumentRepositoryUtil.decodeBase64StringToByteArray(documentData)));
+					}
 					fileList.add(dataDocumentFileName);
-					
+
 					SlotType1 slotType1 = new SlotType1();
 					slotType1.setName(documentId);
 					slotType1.setSlotType("SUCCESS");
@@ -173,7 +201,7 @@ public class DocumentRepositoryEndpoint {
 			response.setStatus("SUCCESS: Documents stored successfully");
 
 		} catch (Exception e) {
-			e.printStackTrace();
+			logger.error("Exception while storing document", e);
 			String errorMessage = e.getMessage();
 //			RegistryError registryError = new RegistryError();
 //			registryError.setCodeContext("");
@@ -191,19 +219,17 @@ public class DocumentRepositoryEndpoint {
 
 		JAXBElement<RegistryResponseType> jaxbEl = new JAXBElement<RegistryResponseType>(qname,
 				RegistryResponseType.class, response);
-		
-		String blobFilename = new StringBuilder(PROVIDE_AND_REGISTER_FILENAME_PREFIX).append(documentUniqueId.replace(":", "_")).append("_").append(requestId).toString();
+
+		String blobFilename = new StringBuilder(PROVIDE_AND_REGISTER_FILENAME_PREFIX)
+				.append(documentUniqueId.replace(":", "_")).append("_").append(requestId).toString();
 
 		String requestBlobFilename = blobFilename + "_request.xml";
-		BlobClient blob = storeContainerClient.getBlobClient(requestBlobFilename);
-		blob.upload(new ByteArrayInputStream(fullReqStr.getBytes(StandardCharsets.UTF_8)), true);
-		System.out.println("Successfully uploaded request xml file " + requestBlobFilename + " to Azure blob");
-
 		String responseBlobFilename = blobFilename + "_response.xml";
-		blob = storeContainerClient.getBlobClient(responseBlobFilename);
-		blob.upload(new ByteArrayInputStream(toXml(jaxbEl).getBytes(StandardCharsets.UTF_8)), true);
-		System.out.println("Successfully uploaded response xml file " + responseBlobFilename + " to Azure blob");
-		System.out.println("ProvideAndRegisterDocumentSetRequest Completed. RequestID=" + requestId);
+		if(enableBlobStoreRegisterDocument) {
+			executions.add(new AzureBlobFileUploadExecutor(storeContainerClient, requestBlobFilename, fullReqStr.getBytes(StandardCharsets.UTF_8)));
+			executions.add(new AzureBlobFileUploadExecutor(storeContainerClient, responseBlobFilename, toXml(jaxbEl).getBytes(StandardCharsets.UTF_8)));
+		}
+		logger.info("ProvideAndRegisterDocumentSetRequest Completed. RequestID=" + requestId);
 
 //		try {
 //			Map<String, Map<String, byte[]>> zipFiles = new HashMap<String, Map<String, byte[]>>();
@@ -227,16 +253,18 @@ public class DocumentRepositoryEndpoint {
 //		} catch (URISyntaxException e) {
 //			e.printStackTrace();
 //		}
-		
-		Map<String, List<String>> fileArchiveApiPayload = new HashMap<String, List<String>>();
-		
-		fileList.add(requestBlobFilename);
-		fileList.add(responseBlobFilename);
-		
-		fileArchiveApiPayload.put(blobFilename+".zip", fileList);
-		
-		httpRequestHelper.postRequest(fileArchiveApiUrl, fileArchiveApiPayload);
-		
+
+		if(enableBlobStoreFileArchive) {
+			Map<String, List<String>> fileArchiveApiPayload = new HashMap<String, List<String>>();
+			fileList.add(requestBlobFilename);
+			fileList.add(responseBlobFilename);
+			fileArchiveApiPayload.put(blobFilename + ".zip", fileList);
+			executions.add(new AzureBlobArchiveExecutor(httpRequestHelper, fileArchiveApiUrl, fileArchiveApiPayload));
+		}
+		if(enableBlobStoreRegisterDocument) {
+			taskExecutor.execute(new ExecutorStarter(executions));
+		}
+
 		return jaxbEl;
 	}
 
@@ -250,7 +278,7 @@ public class DocumentRepositoryEndpoint {
 			@RequestPayload JAXBElement<RetrieveDocumentSetRequestType> request) {
 
 		String fullReqStr = toXml(request);
-		// System.out.println("Full Request String= " + fullReqStr);
+		// logger.info("Full Request String= " + fullReqStr);
 		RetrieveDocumentSetResponseType response = new RetrieveDocumentSetResponseType();
 		QName qname = new QName(NAMESPACE_URI, "Success", "env");
 
@@ -260,12 +288,13 @@ public class DocumentRepositoryEndpoint {
 		String requestId = reqId + getAlphaNumericString(8);
 		String documentUniqueId = StringUtil.EMPTY_STRING;
 		List<String> fileList = new ArrayList<String>();
-		System.out.println("RetrieveDocumentSetRequest received. RequestID=" + requestId);
+		List<Runnable> executions = new ArrayList<Runnable>();
+		logger.info("RetrieveDocumentSetRequest received. RequestID=" + requestId);
 
 		Set<String> documentIds = new HashSet<String>();
 
 		RetrieveDocumentSetRequestType rdsrt = request.getValue();
-		// System.out.println("Request=" +
+		// logger.info("Request=" +
 		// rdsrt.getDocumentRequest().get(0).getDocumentUniqueId());
 		if (null != rdsrt.getDocumentRequest() && rdsrt.getDocumentRequest().size() > 0) {
 			rdsrt.getDocumentRequest().stream().forEach(docReq -> {
@@ -276,7 +305,7 @@ public class DocumentRepositoryEndpoint {
 			});
 		}
 
-		System.out.println("Requested document IDs=" + documentIds.toString());
+		logger.info("Requested document IDs=" + documentIds.toString());
 
 		if (documentIds.size() == 0) {
 			documentIds.addAll(documentRepository.getDocumentNameList());
@@ -289,14 +318,15 @@ public class DocumentRepositoryEndpoint {
 			String documentString = documentRepository.findDocument(null, null, documentId);
 			if (StringUtils.hasText(documentString)) {
 				response.getDocumentResponse().add(addToDocumentSetArray(documentId, documentString));
-				
+
 				String dataDocumentFileName = new StringBuilder(RETRIEVE_DOCUMENT_FILENAME_PREFIX)
-						.append(documentId.replace(":", "_")).append("_").append(requestId).toString()+"_res_document.xml";
-				BlobClient blob = storeContainerClient.getBlobClient(dataDocumentFileName);
-				blob.upload(new ByteArrayInputStream(decodeBase64StringToByteArray(documentString)), true);
-				System.out.println("Successfully uploaded response data document file " + dataDocumentFileName + " to Azure blob");
+						.append(documentId.replace(":", "_")).append("_").append(requestId).toString()
+						+ "_res_document.xml";
+				if(enableBlobStoreRetrieveDocument) {
+					executions.add(new AzureBlobFileUploadExecutor(storeContainerClient, dataDocumentFileName, DocumentRepositoryUtil.decodeBase64StringToByteArray(documentString)));
+				}
 				fileList.add(dataDocumentFileName);
-				
+
 			} else {
 				throw new RuntimeException(DocumentRepositoryMessages.DOCUMENT_NOT_FOUND + documentId);
 			}
@@ -308,29 +338,30 @@ public class DocumentRepositoryEndpoint {
 		response.setRegistryResponse(registryResponse);
 		JAXBElement<RetrieveDocumentSetResponseType> jaxbEl = new JAXBElement<RetrieveDocumentSetResponseType>(qname,
 				RetrieveDocumentSetResponseType.class, response);
-		
+
 		String blobFilename = new StringBuilder(RETRIEVE_DOCUMENT_FILENAME_PREFIX)
 				.append(documentUniqueId.replace(":", "_")).append("_").append(requestId).toString();
 
 		String requestBlobFilename = blobFilename + "_request.xml";
-		BlobClient blob = storeContainerClient.getBlobClient(requestBlobFilename);
-		blob.upload(new ByteArrayInputStream(fullReqStr.getBytes(StandardCharsets.UTF_8)), true);
-		System.out.println("Successfully uploaded RetrieveDocumentSetRequest request xml file " + requestBlobFilename
-				+ " to Azure blob");
-
 		String responseBlobFilename = blobFilename + "_response.xml";
-		blob = storeContainerClient.getBlobClient(responseBlobFilename);
-		blob.upload(new ByteArrayInputStream(toXml(jaxbEl).getBytes(StandardCharsets.UTF_8)), true);
-		System.out.println("Successfully uploaded RetrieveDocumentSetRequest response xml file " + responseBlobFilename
-				+ " to Azure blob");
-		System.out.println("RetrieveDocumentSetRequest Completed. RequestID=" + requestId);
 		
-		Map<String, List<String>> fileArchiveApiPayload = new HashMap<String, List<String>>();
-		fileList.add(requestBlobFilename);
-		fileList.add(responseBlobFilename);
-		fileArchiveApiPayload.put(blobFilename+".zip", fileList);
+		if(enableBlobStoreRetrieveDocument) {
+			executions.add(new AzureBlobFileUploadExecutor(storeContainerClient, requestBlobFilename, fullReqStr.getBytes(StandardCharsets.UTF_8)));
+			executions.add(new AzureBlobFileUploadExecutor(storeContainerClient, responseBlobFilename, toXml(jaxbEl).getBytes(StandardCharsets.UTF_8)));
+		}
+		logger.info("RetrieveDocumentSetRequest Completed. RequestID=" + requestId);
+
+		if(enableBlobStoreFileArchive) {
+			Map<String, List<String>> fileArchiveApiPayload = new HashMap<String, List<String>>();
+			fileList.add(requestBlobFilename);
+			fileList.add(responseBlobFilename);
+			fileArchiveApiPayload.put(blobFilename + ".zip", fileList);
+			executions.add(new AzureBlobArchiveExecutor(httpRequestHelper, fileArchiveApiUrl, fileArchiveApiPayload));
+		}
 		
-		httpRequestHelper.postRequest(fileArchiveApiUrl, fileArchiveApiPayload);
+		if(enableBlobStoreRetrieveDocument) {
+			taskExecutor.execute(new ExecutorStarter(executions));
+		}
 
 		return jaxbEl;
 	}
@@ -342,7 +373,7 @@ public class DocumentRepositoryEndpoint {
 	 */
 	private DocumentResponse addToDocumentSetArray(String documentId, String documentString) {
 		DocumentResponse dr = new DocumentResponse();
-		byte[] bytes = decodeBase64StringToByteArray(documentString);
+		byte[] bytes = DocumentRepositoryUtil.decodeBase64StringToByteArray(documentString);
 		DRByteArrayDataSource barrds = new DRByteArrayDataSource(bytes, "application/octet-stream");
 		DataHandler result = new DataHandler(barrds);
 		dr.setDocument(result);
@@ -363,15 +394,6 @@ public class DocumentRepositoryEndpoint {
 	}
 
 	/**
-	 * @param base64EncStr
-	 * @return
-	 */
-	private byte[] decodeBase64StringToByteArray(String base64EncStr) {
-		Assert.notNull(base64EncStr, "String value must not be null");
-		return Base64.getDecoder().decode(base64EncStr);
-	}
-
-	/**
 	 * @param element
 	 * @return
 	 */
@@ -385,7 +407,7 @@ public class DocumentRepositoryEndpoint {
 			marshaller.marshal(element, baos);
 			return baos.toString();
 		} catch (Exception e) {
-			e.printStackTrace();
+			logger.error("Exception while converting XML document to String", e);
 		}
 		return "";
 	}
