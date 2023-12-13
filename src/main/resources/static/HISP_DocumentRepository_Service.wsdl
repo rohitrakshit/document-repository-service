@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions
+	targetNamespace="urn:ihe:iti:xds-b:2007"
+	xmlns:rs="urn:oasis:names:tc:ebxml-regrep:xsd:rs:3.0"
+	xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+	xmlns:wsaw="http://www.w3.org/2006/05/addressing/wsdl"
+	xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy"
+	xmlns:ihe="urn:ihe:iti:xds-b:2007"
+	xmlns:lcm="urn:oasis:names:tc:ebxml-regrep:xsd:lcm:3.0"
+	xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/"
+	xmlns:http="http://schemas.xmlsoap.org/wsdl/http/"
+	xmlns:ns0="urn:oasis:names:tc:ebxml-regrep:xsd:rim:3.0"
+	xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/"
+	xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/">
+	<wsdl:documentation>IHE XDS.b Document Repository</wsdl:documentation>
+	<wsdl:types>
+		<xsd:schema attributeFormDefault="unqualified"
+			elementFormDefault="qualified"
+			targetNamespace="urn:ihe:iti:xds-b:2007"
+			xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy"
+			xmlns:xs="http://www.w3.org/2001/XMLSchema"
+			xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+			<xsd:include
+				schemaLocation="IHE/XDS.b_DocumentRepository.xsd" />
+			<xsd:element
+				name="DocumentRepository_RetrieveDocumentSetFault">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="payload" type="xs:string" />
+					</xsd:sequence>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element
+				name="DocumentRepository_ProvideAndRegisterDocumentSet-bFault">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="payload" type="xs:string" />
+					</xsd:sequence>
+				</xsd:complexType>
+			</xsd:element>
+		</xsd:schema>
+		<xsd:schema attributeFormDefault="unqualified"
+			elementFormDefault="qualified"
+			targetNamespace="urn:oasis:names:tc:ebxml-regrep:xsd:rs:3.0"
+			xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy"
+			xmlns:xs="http://www.w3.org/2001/XMLSchema"
+			xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+			<xsd:include schemaLocation="ebRS/rs.xsd" />
+		</xsd:schema>
+		<xsd:schema attributeFormDefault="unqualified"
+			elementFormDefault="qualified"
+			targetNamespace="urn:oasis:names:tc:ebxml-regrep:xsd:lcm:3.0"
+			xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy"
+			xmlns:xs="http://www.w3.org/2001/XMLSchema"
+			xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+			<xsd:include schemaLocation="ebRS/lcm.xsd" />
+		</xsd:schema>
+		<xsd:schema attributeFormDefault="unqualified"
+			elementFormDefault="qualified"
+			targetNamespace="urn:oasis:names:tc:ebxml-regrep:xsd:rim:3.0"
+			xmlns:lcm="urn:oasis:names:tc:ebxml-regrep:xsd:rim:3.0"
+			xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy"
+			xmlns:xs="http://www.w3.org/2001/XMLSchema"
+			xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+			<xsd:include schemaLocation="ebRS/rim.xsd" />
+		</xsd:schema>
+	</wsdl:types>
+	<wsdl:message name="ProvideAndRegisterDocumentSet-bFault">
+		<wsdl:part name="parameters"
+			element="ihe:DocumentRepository_ProvideAndRegisterDocumentSet-bFault">
+		</wsdl:part>
+	</wsdl:message>
+	<wsdl:message name="RetrieveDocumentSetResponse">
+		<wsdl:part name="parameters"
+			element="ihe:RetrieveDocumentSetResponse">
+		</wsdl:part>
+	</wsdl:message>
+	<wsdl:message name="RetrieveDocumentSetRequest">
+		<wsdl:part name="parameters"
+			element="ihe:RetrieveDocumentSetRequest">
+		</wsdl:part>
+	</wsdl:message>
+	<wsdl:message
+		name="ProvideAndRegisterDocumentSet-bRequest">
+		<wsdl:part name="parameters"
+			element="ihe:ProvideAndRegisterDocumentSetRequest">
+		</wsdl:part>
+	</wsdl:message>
+	<wsdl:message
+		name="ProvideAndRegisterDocumentSet-bResponse">
+		<wsdl:part name="parameters" element="rs:RegistryResponse">
+		</wsdl:part>
+	</wsdl:message>
+	<wsdl:message name="RetrieveDocumentSetFault">
+		<wsdl:part name="parameters"
+			element="ihe:DocumentRepository_RetrieveDocumentSetFault">
+		</wsdl:part>
+	</wsdl:message>
+	<wsdl:portType
+		name="HISP_DocumentRepository_ServicePortType"
+		wsp:PolicyURIs="#servicePolicy">
+		<wsdl:operation name="ProvideAndRegisterDocumentSet-b">
+			<wsdl:input
+				message="ihe:ProvideAndRegisterDocumentSet-bRequest"
+				wsaw:Action="urn:ihe:iti:2007:ProvideAndRegisterDocumentSet-b">
+			</wsdl:input>
+			<wsdl:output
+				message="ihe:ProvideAndRegisterDocumentSet-bResponse"
+				wsaw:Action="urn:ihe:iti:2007:ProvideAndRegisterDocumentSet-bResponse">
+			</wsdl:output>
+			<wsdl:fault name="ProvideAndRegisterDocumentSet-bFault"
+				message="ihe:ProvideAndRegisterDocumentSet-bFault"
+				wsaw:Action="urn:ihe:iti:xds-b:2007:Epic_DocumentRepository_ServicePortType:DocumentRepository_ProvideAndRegisterDocumentSet-bFault">
+			</wsdl:fault>
+		</wsdl:operation>
+		<wsdl:operation name="RetrieveDocumentSet">
+			<wsdl:input message="ihe:RetrieveDocumentSetRequest"
+				wsaw:Action="urn:ihe:iti:2007:RetrieveDocumentSet">
+			</wsdl:input>
+			<wsdl:output message="ihe:RetrieveDocumentSetResponse"
+				wsaw:Action="urn:ihe:iti:2007:RetrieveDocumentSetResponse">
+			</wsdl:output>
+			<wsdl:fault name="RetrieveDocumentSetFault"
+				message="ihe:RetrieveDocumentSetFault"
+				wsaw:Action="urn:ihe:iti:xds-b:2007:Epic_DocumentRepository_ServicePortType:DocumentRepository_RetrieveDocumentSetFault">
+			</wsdl:fault>
+		</wsdl:operation>
+	</wsdl:portType>
+	<wsdl:binding
+		name="HISP_DocumentRepository_ServiceSoap12Binding"
+		type="ihe:HISP_DocumentRepository_ServicePortType">
+		<soap12:binding style="document"
+			transport="http://schemas.xmlsoap.org/soap/http" />
+		<wsaw:UsingAddressing wsdl:required="false" />
+		<wsdl:operation name="ProvideAndRegisterDocumentSet-b">
+			<soap12:operation
+				soapAction="urn:ihe:iti:2007:ProvideAndRegisterDocumentSet-b"
+				style="document" />
+			<wsdl:input>
+				<soap12:body use="literal" />
+			</wsdl:input>
+			<wsdl:output>
+				<soap12:body use="literal" />
+			</wsdl:output>
+			<wsdl:fault name="ProvideAndRegisterDocumentSet-bFault">
+				<soap:fault name="ProvideAndRegisterDocumentSet-bFault"
+					use="literal" />
+			</wsdl:fault>
+		</wsdl:operation>
+		<wsdl:operation name="RetrieveDocumentSet">
+			<soap12:operation
+				soapAction="urn:ihe:iti:2007:RetrieveDocumentSet" style="document" />
+			<wsdl:input>
+				<soap12:body use="literal" />
+			</wsdl:input>
+			<wsdl:output>
+				<soap12:body use="literal" />
+			</wsdl:output>
+			<wsdl:fault name="RetrieveDocumentSetFault">
+				<soap:fault name="RetrieveDocumentSetFault" use="literal" />
+			</wsdl:fault>
+		</wsdl:operation>
+	</wsdl:binding>
+	<wsdl:service name="HISP_DocumentRepository_Service">
+		<wsdl:port
+			name="HISP_DocumentRepository_ServiceHttpsSoap12Endpoint"
+			binding="ihe:HISP_DocumentRepository_ServiceSoap12Binding">
+			<soap12:address location="http://localhost:8080/services" />
+		</wsdl:port>
+	</wsdl:service>
+	<wsp:Policy wsu:Id="servicePolicy"
+		xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy"
+		xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+		<wsp:ExactlyOne>
+			<wsp:All>
+				<wsam:Addressing wsp:Optional="true"
+					xmlns:wsam="http://www.w3.org/2007/05/addressing/metadata">
+					<wsp:Policy>
+						<wsam:AnonymousResponses />
+					</wsp:Policy>
+				</wsam:Addressing>
+			</wsp:All>
+		</wsp:ExactlyOne>
+	</wsp:Policy>
+</wsdl:definitions>
